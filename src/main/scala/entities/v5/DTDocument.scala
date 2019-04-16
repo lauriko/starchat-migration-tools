@@ -1,4 +1,4 @@
-package entities
+package entities.v5
 
 import scala.collection.immutable.{List, Map}
 
@@ -15,5 +15,7 @@ case class DTDocument(state: String,
                                failureValue: String,
                                evaluationClass: Option[String] = Some("default"),
                                version: Option[Long] = Some(0L)
-                     )
+                     ) {
+  def as[T](implicit f: DTDocument => T): T = f(this)
+}
 

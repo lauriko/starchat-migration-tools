@@ -2,13 +2,12 @@ package command
 
 import scopt.OptionParser
 import scalaj.http._
-import entities.{DTDocument, SearchDTDocumentsResults}
+import entities.{v4, v5}
 import conversion.DTDocumentJsonConversion
+import conversion.DTDocumentVersionConversion
 import play.api.libs.json._
 
-import scala.language.implicitConversions
-
-object MigrateDecisionTable extends DTDocumentJsonConversion {
+object MigrateDecisionTable extends DTDocumentVersionConversion with DTDocumentJsonConversion {
 
   private[this] case class Params(fromUrl: String = "",
                                   fromAuth: String = "",
@@ -17,18 +16,18 @@ object MigrateDecisionTable extends DTDocumentJsonConversion {
                                  )
 
 
-  def readDocsFrom(params: Params): List[DTDocument] = {
+  def readDocsFrom(params: Params): List[v4.DTDocument] = {
     val response: HttpResponse[String] = Http(params.fromUrl+"/decisiontable?dump=true")
       .headers(Seq(("Authorization", "Basic "+params.fromAuth)))
       .asString
-    val dtDocumentResults = Json.parse(response.body).as[SearchDTDocumentsResults]
+    val dtDocumentResults = Json.parse(response.body).as[v4.SearchDTDocumentsResults]
     dtDocumentResults.hits.map(_.document)
   }
 
 
-  def writeDocsTo(params: Params, documents: List[DTDocument]) = {
+  def writeDocsTo(params: Params, documents: List[v5.DTDocument]) = {
     val requests = documents.map( document => Http(params.toUrl+"/decisiontable")
-      .postData(Json.toJson(document).toString)
+      .postData(document.as[JsValue].toString)
       .headers(Seq(("Authorization", "Basic " + params.toAuth), ("Content-Type", "application/json")))
     )
     requests.map(_.asString)
@@ -36,9 +35,17 @@ object MigrateDecisionTable extends DTDocumentJsonConversion {
 
   private[this] def execute(params: Params) {
     println(params)
-    val documents = readDocsFrom(params)
-    val responses = writeDocsTo(params, documents)
-    println(responses)
+    println("reading from " + params.fromUrl)
+    val v4Documents = readDocsFrom(params)
+    println("converting documents")
+    val v5Documents = v4Documents.map(_.as[v5.DTDocument])
+    println("posting documents to " + params.toUrl)
+    val responses = writeDocsTo(params, v5Documents)
+    val (succeed, failed) = responses.foldLeft((0,0))(
+      (b, response) =>
+        if(response.is2xx) (b._1+1, b._2)
+        else (b._1, b._2+1))
+    println(f"Posted $succeed documents successfully and $failed failed")
   }
 
   def main(args: Array[String]) {
