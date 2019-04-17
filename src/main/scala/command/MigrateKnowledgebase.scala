@@ -1,13 +1,13 @@
 package command
 
-import scopt.OptionParser
-import scalaj.http._
-import entities.{v4, v5}
-import conversion.DTDocumentJsonConversion
-import conversion.DTDocumentVersionConversion
+import conversion.{KBDocumentJsonConversion, KBDocumentVersionConversion}
+import entities.v4.KBDocument
+import entities.v5.QADocument
 import play.api.libs.json._
+import scalaj.http._
+import scopt.OptionParser
 
-object MigrateDecisionTable extends DTDocumentVersionConversion with DTDocumentJsonConversion {
+object MigrateKnowledgebase extends KBDocumentVersionConversion with KBDocumentJsonConversion {
 
   private[this] case class Params(fromUrl: String = "",
                                   fromAuth: String = "",
@@ -16,31 +16,25 @@ object MigrateDecisionTable extends DTDocumentVersionConversion with DTDocumentJ
                                  )
 
 
-  def readDocs(params: Params): List[v4.DTDocument] = {
-    val response: HttpResponse[String] = Http(params.fromUrl+"/decisiontable?dump=true")
-      .headers(Seq(("Authorization", "Basic "+params.fromAuth)))
+
+  def readDocs(params: Params): List[KBDocument]= {
+    val response = Http(params.fromUrl + "/stream/knowledgebase")
+      .headers(Seq(("Authorization", "Basic " + params.fromAuth), ("Content-Type", "application/json")))
       .asString
-    val dtDocumentResults = Json.parse(response.body).as[v4.SearchDTDocumentsResults]
-    dtDocumentResults.hits.map(_.document)
+    response.body.split("\n").map(Json.parse(_).as[KBDocument]).toList
   }
 
-
-  def writeDocs(params: Params, documents: List[v5.DTDocument]) = {
-    val requests = documents.map( document => Http(params.toUrl+"/decisiontable")
-      .postData(document.as[JsValue].toString)
+  def writeDocs(params: Params, documents: List[QADocument]) =  {
+    val requests = documents.map( document => Http(params.toUrl + "/knowledgebase")
       .headers(Seq(("Authorization", "Basic " + params.toAuth), ("Content-Type", "application/json")))
-    )
+      .postData(document.as[JsValue].toString))
     requests.map(_.asString)
   }
 
   private[this] def execute(params: Params) {
-    println(params)
-    println("reading from " + params.fromUrl)
-    val v4Documents = readDocs(params)
-    println("converting documents")
-    val v5Documents = v4Documents.map(_.as[v5.DTDocument])
-    println("posting documents to " + params.toUrl)
-    val responses = writeDocs(params, v5Documents)
+    val kbDocuments = readDocs(params)
+    val qaDocuments = kbDocuments.map(_.as[QADocument])
+    val responses = writeDocs(params, qaDocuments)
     val (succeed, failed) = responses.foldLeft((0,0))(
       (b, response) =>
         if(response.is2xx) (b._1+1, b._2)
@@ -72,5 +66,4 @@ object MigrateDecisionTable extends DTDocumentVersionConversion with DTDocumentJ
       case _ =>
     }
   }
-
 }
