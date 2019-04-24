@@ -1,7 +1,5 @@
 package entities.v4
 
-import scala.collection.immutable.{List, Map}
-
 case class DTDocument(state: String,
                       execution_order: Int,
                       max_state_count: Int,
