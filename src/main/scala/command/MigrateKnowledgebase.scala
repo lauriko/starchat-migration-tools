@@ -12,7 +12,8 @@ object MigrateKnowledgebase extends KBDocumentVersionConversion with KBDocumentJ
   private[this] case class Params(fromUrl: String = "",
                                   fromAuth: String = "",
                                   toUrl: String = "",
-                                  toAuth: String = ""
+                                  toAuth: String = "",
+                                  timeout: Int = 5000
                                  )
 
 
@@ -20,6 +21,7 @@ object MigrateKnowledgebase extends KBDocumentVersionConversion with KBDocumentJ
   def readDocs(params: Params): List[KBDocument]= {
     val response = Http(params.fromUrl + "/stream/knowledgebase")
       .headers(Seq(("Authorization", "Basic " + params.fromAuth), ("Content-Type", "application/json")))
+      .option(HttpOptions.readTimeout(params.timeout))
       .asString
     response.body.split("\n").map(Json.parse(_).as[KBDocument]).toList
   }
@@ -49,7 +51,7 @@ object MigrateKnowledgebase extends KBDocumentVersionConversion with KBDocumentJ
       arg[String]("fromUrl")
         .text("url for StarChat to migrate from")
         .action((url, params) => params.copy(fromUrl = url))
-      arg[String]("fromAuth").required()
+      arg[String]("fromAuth")
         .text("Authorizaion for the StarChat to migrate from")
         .action((auth, params) => params.copy(fromAuth = auth))
       arg[String]("toUrl")
@@ -58,6 +60,9 @@ object MigrateKnowledgebase extends KBDocumentVersionConversion with KBDocumentJ
       arg[String]("toAuth")
         .text("Authorizaion for the StarChat to migrate to")
         .action((auth, params) => params.copy(toAuth = auth))
+      opt[Int]("timeout")
+        .text("Read timeout in milliseconds")
+        .action((time, params) => params.copy(timeout = time))
       help("help").text("prints this usage text")
     }
     parser.parse(args, defaultParams) match {

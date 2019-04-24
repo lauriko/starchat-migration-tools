@@ -12,13 +12,15 @@ object MigrateDecisionTable extends DTDocumentVersionConversion with DTDocumentJ
   private[this] case class Params(fromUrl: String = "",
                                   fromAuth: String = "",
                                   toUrl: String = "",
-                                  toAuth: String = ""
+                                  toAuth: String = "",
+                                  timeout: Int = 5000
                                  )
 
 
   def readDocs(params: Params): List[v4.DTDocument] = {
     val response: HttpResponse[String] = Http(params.fromUrl+"/decisiontable?dump=true")
       .headers(Seq(("Authorization", "Basic "+params.fromAuth)))
+      .option(HttpOptions.readTimeout(params.timeout))
       .asString
     val dtDocumentResults = Json.parse(response.body).as[v4.SearchDTDocumentsResults]
     dtDocumentResults.hits.map(_.document)
@@ -55,7 +57,7 @@ object MigrateDecisionTable extends DTDocumentVersionConversion with DTDocumentJ
       arg[String]("fromUrl")
         .text("url for StarChat to migrate from")
         .action((url, params) => params.copy(fromUrl = url))
-      arg[String]("fromAuth").required()
+      arg[String]("fromAuth")
         .text("Authorizaion for the StarChat to migrate from")
         .action((auth, params) => params.copy(fromAuth = auth))
       arg[String]("toUrl")
@@ -64,6 +66,9 @@ object MigrateDecisionTable extends DTDocumentVersionConversion with DTDocumentJ
       arg[String]("toAuth")
         .text("Authorizaion for the StarChat to migrate to")
         .action((auth, params) => params.copy(toAuth = auth))
+      opt[Int]("timeout")
+        .text("Read timeout in milliseconds")
+        .action((time, params) => params.copy(timeout = time))
       help("help").text("prints this usage text")
     }
     parser.parse(args, defaultParams) match {
